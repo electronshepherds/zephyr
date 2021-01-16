@@ -42,6 +42,9 @@ struct bt_ots_obj_type {
 		/* 16-bit UUID value */
 		struct bt_uuid_16 uuid_16;
 
+		/* 32-bit UUID value */
+		struct bt_uuid_32 uuid_32;
+
 		/* 128-bit UUID value */
 		struct bt_uuid_128 uuid_128;
 	};
@@ -493,10 +496,11 @@ struct bt_ots_cb {
 	 *  @return 0 in case of success or negative value in case of error.
 	 *  Possible return values:
 	 *  -ENOMEM if no available space for new object.
+	 *  -ENOTSUP if object type is not supported
 	 */
 	int (*obj_created)(struct bt_ots *ots, struct bt_conn *conn,
-			   uint64_t id,
-			   const struct bt_ots_obj_metadata *init);
+			   uint64_t id, void **user_data,
+			   struct bt_ots_obj_metadata *init);
 
 	/** @brief Object deleted callback
 	 *
@@ -510,7 +514,7 @@ struct bt_ots_cb {
 	 *  @param id   Object ID.
 	 */
 	void (*obj_deleted)(struct bt_ots *ots, struct bt_conn *conn,
-			    uint64_t id);
+			    uint64_t id, void *user_data);
 
 	/** @brief Object selected callback
 	 *
@@ -521,7 +525,7 @@ struct bt_ots_cb {
 	 *  @param id   Object ID.
 	 */
 	void (*obj_selected)(struct bt_ots *ots, struct bt_conn *conn,
-			     uint64_t id);
+			     uint64_t id, void *user_data);
 
 	/** @brief Object read callback
 	 *
@@ -543,8 +547,8 @@ struct bt_ots_cb {
 	 *          shall be smaller or equal to the len parameter.
 	 */
 	uint32_t (*obj_read)(struct bt_ots *ots, struct bt_conn *conn,
-			     uint64_t id, uint8_t **data, uint32_t len,
-			     uint32_t offset);
+			     uint64_t id, void *user_data, uint8_t **data,
+			     uint32_t len, uint32_t offset);
 
 	/** @brief Object write callback
 	 *
@@ -568,8 +572,8 @@ struct bt_ots_cb {
 	 *                       moment. It should not be returned.
 	 */
 	int (*obj_write)(struct bt_ots *ots, struct bt_conn *conn, uint64_t id,
-			 uint8_t *data, uint32_t len, uint32_t offset,
-			 uint32_t rem);
+			 void *user_data, uint8_t *data, uint32_t len,
+			 uint32_t offset, uint32_t rem);
 };
 
 /** @brief Descriptor for OTS initialization. */
@@ -592,7 +596,8 @@ struct bt_ots_init {
  *
  *  @return 0 in case of success or negative value in case of error.
  */
-int bt_ots_obj_add(struct bt_ots *ots, struct bt_ots_obj_metadata *obj_init);
+int bt_ots_obj_add(struct bt_ots *ots, struct bt_ots_obj_metadata *obj_init,
+		   void *user_data);
 
 /** @brief Delete an object from the OTS instance.
  *

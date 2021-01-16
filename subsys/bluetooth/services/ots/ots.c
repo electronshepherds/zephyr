@@ -227,8 +227,8 @@ static ssize_t ots_obj_prop_read(struct bt_conn *conn,
 				 sizeof(ots->cur_obj->metadata.props));
 }
 
-int bt_ots_obj_add(struct bt_ots *ots,
-			    struct bt_ots_obj_metadata *obj_init)
+int bt_ots_obj_add(struct bt_ots *ots, struct bt_ots_obj_metadata *obj_init,
+		   void *user_data)
 {
 	int err;
 	struct bt_gatt_ots_object *obj;
@@ -251,10 +251,12 @@ int bt_ots_obj_add(struct bt_ots *ots,
 
 	/* Initialize object. */
 	memcpy(&obj->metadata, obj_init, sizeof(obj->metadata));
+	obj->user_data = user_data;
 
 	/* Request object data. */
 	if (ots->cb->obj_created) {
-		err = ots->cb->obj_created(ots, NULL, obj->id, obj_init);
+		err = ots->cb->obj_created(ots, NULL, obj->id, &obj->user_data,
+					   obj_init);
 		if (err) {
 			bt_gatt_ots_obj_manager_obj_delete(obj);
 			return err;
@@ -292,7 +294,7 @@ int bt_ots_obj_delete(struct bt_ots *ots, uint64_t id)
 	}
 
 	if (ots->cb->obj_deleted) {
-		ots->cb->obj_deleted(ots, NULL, obj->id);
+		ots->cb->obj_deleted(ots, NULL, obj->id, obj->user_data);
 	}
 
 	return 0;

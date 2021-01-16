@@ -63,6 +63,7 @@ struct bt_gatt_ots_object {
 	uint64_t id;
 	struct bt_ots_obj_metadata metadata;
 	struct bt_gatt_ots_object_state state;
+	void *user_data;
 };
 
 struct bt_gatt_ots_indicate {
