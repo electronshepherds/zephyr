@@ -91,6 +91,7 @@ struct bt_ots {
 	struct bt_ots_cb *cb;
 	struct bt_ots_dir_list *dir_list;
 	void *obj_manager;
+	uint32_t dflt_obj_prop;
 };
 
 #ifdef __cplusplus

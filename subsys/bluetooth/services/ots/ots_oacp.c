@@ -38,7 +38,7 @@ static enum bt_gatt_ots_oacp_res_code oacp_create_proc_validate(
 	struct bt_gatt_ots_oacp_create_params *params = &proc->create_params;
 	bt_uuid_to_str(&params->type.uuid, str, BT_UUID_STR_LEN);
 	LOG_DBG("Validating Create procedure with size: 0x%08X and "
-		"type: %s", params->size, str);
+		"type: %s", params->size, log_strdup(str));
 
 	err = bt_gatt_ots_obj_manager_obj_add(ots->obj_manager, &obj);
 	if (err) {
@@ -50,9 +50,8 @@ static enum bt_gatt_ots_oacp_res_code oacp_create_proc_validate(
 	obj->metadata.type = params->type;
 	obj->metadata.size.cur = 0;
 	obj->metadata.size.alloc = params->size;
+	obj->metadata.props = ots->dflt_obj_prop;
 	obj->user_data = NULL;
-	BT_OTS_OBJ_SET_PROP_WRITE(obj->metadata.props);
-	BT_OTS_OBJ_SET_PROP_READ(obj->metadata.props);
 
 	if (ots->cb->obj_created) {
 		err = ots->cb->obj_created(ots, conn, obj->id, &obj->user_data,
@@ -207,7 +206,7 @@ static int oacp_write_proc_cb(struct bt_gatt_ots_l2cap *l2cap_ctx,
 		LOG_DBG("OACP Write Op over L2CAP is completed");
 
 		if (write_op->recv_len > write_op->oacp_params.len) {
-			LOG_WRN("More bytes received than the client indicated");
+			LOG_WRN("More bytes received than the client indicated: %d > %d", write_op->recv_len, write_op->oacp_params.len);
 			len = write_op->oacp_params.len - offset;
 		}
 		ots->cur_obj->state.type = BT_GATT_OTS_OBJECT_IDLE_STATE;
@@ -389,6 +388,8 @@ static bool oacp_command_len_verify(struct bt_gatt_ots_oacp_proc *proc,
 		ref_len += sizeof(proc->create_params.size);
 
 		type = &proc->create_params.type;
+		ref_len += sizeof(type->uuid.type);
+
 		if (type->uuid.type == BT_UUID_TYPE_16) {
 			ref_len += sizeof(type->uuid_16.val);
 		} else if (type->uuid.type == BT_UUID_TYPE_32) {

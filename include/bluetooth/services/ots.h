@@ -586,6 +586,9 @@ struct bt_ots_init {
 
 	/* Callbacks */
 	struct bt_ots_cb *cb;
+
+	/* Default object properties */
+	uint32_t dflt_obj_prop;
 };
 
 /** @brief Add an object to the OTS instance.
