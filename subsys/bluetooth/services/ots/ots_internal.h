@@ -82,6 +82,7 @@ struct bt_ots {
 	struct bt_gatt_ots_l2cap l2cap;
 	struct bt_ots_cb *cb;
 	void *obj_manager;
+	uint32_t dflt_obj_prop;
 };
 
 #ifdef __cplusplus

@@ -75,14 +75,6 @@ LOG_MODULE_REGISTER(bt_ots, CONFIG_BT_OTS_LOG_LEVEL);
 	OACP_FEAT_BIT_TRUNCATE | \
 	OACP_FEAT_BIT_APPEND)
 
-/* Object properties supported by Kconfig */
-#define OBJ_PROP (\
-	OBJ_PROP_BIT_READ | \
-	OBJ_PROP_BIT_WRITE | \
-	OBJ_PROP_BIT_PATCH | \
-	OBJ_PROP_BIT_TRUNCATE | \
-	OBJ_PROP_BIT_APPEND)
-
 #if defined(CONFIG_BT_OTS_OLCP_GO_TO_SUPPORT)
 #define OLCP_FEAT_BIT_GOTO BIT(BT_OTS_OLCP_FEAT_GO_TO)
 #else
@@ -96,13 +88,13 @@ static inline bool ots_obj_validate_prop_against_oacp(uint32_t prop, uint32_t oa
 {
 	uint32_t features = 0;
 
-	WRITE_BIT((features), BT_OTS_OACP_FEAT_DELETE, (prop) & BIT(BT_OTS_OBJ_PROP_DELETE));
-	WRITE_BIT((features), BT_OTS_OACP_FEAT_EXECUTE, (prop) & BIT(BT_OTS_OBJ_PROP_EXECUTE));
-	WRITE_BIT((features), BT_OTS_OACP_FEAT_READ, (prop) & BIT(BT_OTS_OBJ_PROP_READ));
-	WRITE_BIT((features), BT_OTS_OACP_FEAT_WRITE, (prop) & BIT(BT_OTS_OBJ_PROP_WRITE));
-	WRITE_BIT((features), BT_OTS_OACP_FEAT_APPEND, (prop) & BIT(BT_OTS_OBJ_PROP_APPEND));
-	WRITE_BIT((features), BT_OTS_OACP_FEAT_TRUNCATE, (prop) & BIT(BT_OTS_OBJ_PROP_TRUNCATE));
-	WRITE_BIT((features), BT_OTS_OACP_FEAT_PATCH, (prop) & BIT(BT_OTS_OBJ_PROP_PATCH));
+	WRITE_BIT(features, BT_OTS_OACP_FEAT_DELETE, prop & BIT(BT_OTS_OBJ_PROP_DELETE));
+	WRITE_BIT(features, BT_OTS_OACP_FEAT_EXECUTE, prop & BIT(BT_OTS_OBJ_PROP_EXECUTE));
+	WRITE_BIT(features, BT_OTS_OACP_FEAT_READ, prop & BIT(BT_OTS_OBJ_PROP_READ));
+	WRITE_BIT(features, BT_OTS_OACP_FEAT_WRITE, prop & BIT(BT_OTS_OBJ_PROP_WRITE));
+	WRITE_BIT(features, BT_OTS_OACP_FEAT_APPEND, prop & BIT(BT_OTS_OBJ_PROP_APPEND));
+	WRITE_BIT(features, BT_OTS_OACP_FEAT_TRUNCATE, prop & BIT(BT_OTS_OBJ_PROP_TRUNCATE));
+	WRITE_BIT(features, BT_OTS_OACP_FEAT_PATCH, prop & BIT(BT_OTS_OBJ_PROP_PATCH));
 
 	if (features & (~oacp)) {
 		return false;
@@ -233,11 +225,6 @@ int bt_ots_obj_add(struct bt_ots *ots, struct bt_ots_obj_metadata *obj_init,
 	int err;
 	struct bt_gatt_ots_object *obj;
 
-	if (obj_init->props & (~((uint32_t) OBJ_PROP))) {
-		LOG_DBG("Unsupported object properties selected");
-		return -ENOTSUP;
-	}
-
 	if (!ots_obj_validate_prop_against_oacp(obj_init->props, ots->features.oacp)) {
 		LOG_DBG("Object properties are not a subset of OACP");
 		return -ENOTSUP;
@@ -342,6 +329,8 @@ int bt_ots_init(struct bt_ots *ots,
 	}
 	ots->features.olcp = ots_init->features.olcp;
 	LOG_DBG("OLCP features: 0x%04X", ots->features.olcp);
+
+	ots->dflt_obj_prop = ots_init->dflt_obj_prop;
 
 	/* Register L2CAP context. */
 	err = bt_gatt_ots_l2cap_register(&ots->l2cap);
