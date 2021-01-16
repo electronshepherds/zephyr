@@ -8,6 +8,7 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/printk.h>
+#include <sys/slist.h>
 #include <zephyr.h>
 
 #include <bluetooth/bluetooth.h>
@@ -19,8 +20,13 @@
 #define DEVICE_NAME      CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN  (sizeof(DEVICE_NAME) - 1)
 
-#define OBJ_POOL_SIZE 2
+#define OBJ_POOL_SIZE 5
 #define OBJ_MAX_SIZE  100
+
+struct object {
+	sys_snode_t node;
+	uint8_t data[OBJ_MAX_SIZE];
+};
 
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -31,8 +37,10 @@ static const struct bt_data sd[] = {
 	BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_OTS_VAL)),
 };
 
-static uint8_t objects[OBJ_POOL_SIZE][OBJ_MAX_SIZE];
-static uint32_t obj_cnt;
+static sys_slist_t obj_free_list;
+static sys_slist_t obj_used_list;
+
+static struct object objects[OBJ_POOL_SIZE];
 
 static void connected(struct bt_conn *conn, uint8_t err)
 {
@@ -55,14 +63,19 @@ static struct bt_conn_cb conn_callbacks = {
 };
 
 static int ots_obj_created(struct bt_ots *ots, struct bt_conn *conn,
-			   uint64_t id,
-			   const struct bt_ots_obj_metadata *init)
+			   uint64_t id, void **user_data,
+			   struct bt_ots_obj_metadata *init)
 {
 	char id_str[BT_OTS_OBJ_ID_STR_LEN];
+	struct object *obj;
+	sys_snode_t *node;
+	int mult;
 
 	bt_ots_obj_id_to_str(id, id_str, sizeof(id_str));
 
-	if (obj_cnt >= ARRAY_SIZE(objects)) {
+	node = sys_slist_get(&obj_free_list);
+
+	if (!node) {
 		printk("No item from Object pool is available for Object "
 		       "with %s ID\n", id_str);
 		return -ENOMEM;
@@ -74,26 +87,39 @@ static int ots_obj_created(struct bt_ots *ots, struct bt_conn *conn,
 		return -ENOMEM;
 	}
 
+	obj = CONTAINER_OF(node, struct object, node);
+
+	if (user_data) {
+		mult = *((int *)*user_data);
+		for (uint32_t i = 0; i < init->size.alloc; i++) {
+			obj->data[i] = (i + 1) * mult;
+		}
+	}
+
+	BT_OTS_OBJ_SET_PROP_DELETE(init->props);
+
+	*user_data = obj;
+
 	printk("Object with %s ID has been created\n", id_str);
-	obj_cnt++;
 
 	return 0;
 }
 
 static void ots_obj_deleted(struct bt_ots *ots, struct bt_conn *conn,
-			    uint64_t id)
+			    uint64_t id, void *user_data)
 {
 	char id_str[BT_OTS_OBJ_ID_STR_LEN];
+	struct object *obj = (struct object *)user_data;
 
 	bt_ots_obj_id_to_str(id, id_str, sizeof(id_str));
 
+	sys_slist_find_and_remove(&obj_used_list, &obj->node);
+	sys_slist_append(&obj_free_list, &obj->node);
 	printk("Object with %s ID has been deleted\n", id_str);
-
-	obj_cnt--;
 }
 
 static void ots_obj_selected(struct bt_ots *ots, struct bt_conn *conn,
-			     uint64_t id)
+			     uint64_t id, void *user_data)
 {
 	char id_str[BT_OTS_OBJ_ID_STR_LEN];
 
@@ -103,11 +129,11 @@ static void ots_obj_selected(struct bt_ots *ots, struct bt_conn *conn,
 }
 
 static uint32_t ots_obj_read(struct bt_ots *ots, struct bt_conn *conn,
-			     uint64_t id, uint8_t **data, uint32_t len,
-			     uint32_t offset)
+			     uint64_t id, void *user_data, uint8_t **data,
+			     uint32_t len, uint32_t offset)
 {
 	char id_str[BT_OTS_OBJ_ID_STR_LEN];
-	uint32_t obj_index = (id % ARRAY_SIZE(objects));
+	struct object *obj = (struct object *)user_data;
 
 	bt_ots_obj_id_to_str(id, id_str, sizeof(id_str));
 
@@ -118,12 +144,12 @@ static uint32_t ots_obj_read(struct bt_ots *ots, struct bt_conn *conn,
 		return 0;
 	}
 
-	*data = &objects[obj_index][offset];
+	*data = &obj->data[offset];
 
 	/* Send even-indexed objects in 20 byte packets
 	 * to demonstrate fragmented transmission.
 	 */
-	if ((obj_index % 2) == 0) {
+	if ((id % 2) == 0) {
 		len = (len < 20) ? len : 20;
 	}
 
@@ -135,11 +161,11 @@ static uint32_t ots_obj_read(struct bt_ots *ots, struct bt_conn *conn,
 }
 
 static int ots_obj_write(struct bt_ots *ots, struct bt_conn *conn, uint64_t id,
-		     uint8_t *data, uint32_t len, uint32_t offset,
-		     uint32_t rem)
+		     	 void *user_data, uint8_t *data, uint32_t len,
+		     	 uint32_t offset, uint32_t rem)
 {
 	char id_str[BT_OTS_OBJ_ID_STR_LEN];
-	uint32_t obj_index = (id % ARRAY_SIZE(objects));
+	struct object *obj = (struct object *)user_data;
 
 	bt_ots_obj_id_to_str(id, id_str, sizeof(id_str));
 
@@ -147,7 +173,7 @@ static int ots_obj_write(struct bt_ots *ots, struct bt_conn *conn, uint64_t id,
 		"Offset = %d, Length = %d, Remaining= %d\n",
 		id_str, offset, len, rem);
 
-	memcpy(&objects[obj_index][offset], data, len);
+	memcpy(&obj->data[offset], data, len);
 
 	return 0;
 }
@@ -163,6 +189,7 @@ static struct bt_ots_cb ots_callbacks = {
 static int ots_init(void)
 {
 	int err;
+	int mult;
 	struct bt_ots *ots;
 	struct bt_ots_init ots_init;
 	struct bt_ots_obj_metadata obj_init;
@@ -188,46 +215,47 @@ static int ots_init(void)
 		return err;
 	}
 
-	/* Prepare first object demo data and add it to the instance. */
-	for (uint32_t i = 0; i < sizeof(objects[0]); i++) {
-		objects[0][i] = i + 1;
+	/* Populate objects free list */
+	sys_slist_init(&obj_free_list);
+	for (size_t i = 0; i < ARRAY_SIZE(objects); i++) {
+		sys_slist_append(&obj_free_list, &objects[i].node);
 	}
+
+	sys_slist_init(&obj_used_list);
 
 	memset(&obj_init, 0, sizeof(obj_init));
 	obj_init.name = "first_object.txt";
 	obj_init.type.uuid.type = BT_UUID_TYPE_16;
 	obj_init.type.uuid_16.val = BT_UUID_OTS_TYPE_UNSPECIFIED_VAL;
-	obj_init.size.cur = sizeof(objects[0]);
-	obj_init.size.alloc = sizeof(objects[0]);
+	obj_init.size.cur = OBJ_MAX_SIZE;
+	obj_init.size.alloc = OBJ_MAX_SIZE;
 	BT_OTS_OBJ_SET_PROP_READ(obj_init.props);
 	BT_OTS_OBJ_SET_PROP_WRITE(obj_init.props);
 	BT_OTS_OBJ_SET_PROP_PATCH(obj_init.props);
 
-	err = bt_ots_obj_add(ots, &obj_init);
+	mult = 1;
+	err = bt_ots_obj_add(ots, &obj_init, &mult);
 	if (err) {
 		printk("Failed to add an object to OTS (err: %d)\n", err);
 		return err;
-	}
-
-	/* Prepare second object demo data and add it to the instance. */
-	for (uint32_t i = 0; i < sizeof(objects[1]); i++) {
-		objects[1][i] = i * 2;
 	}
 
 	memset(&obj_init, 0, sizeof(obj_init));
 	obj_init.name = "second_object.gif";
 	obj_init.type.uuid.type = BT_UUID_TYPE_16;
 	obj_init.type.uuid_16.val = BT_UUID_OTS_TYPE_UNSPECIFIED_VAL;
-	obj_init.size.cur = sizeof(objects[1]);
-	obj_init.size.alloc = sizeof(objects[1]);
+	obj_init.size.cur = OBJ_MAX_SIZE;
+	obj_init.size.alloc = OBJ_MAX_SIZE;
 	BT_OTS_OBJ_SET_PROP_READ(obj_init.props);
+	BT_OTS_OBJ_SET_PROP_WRITE(obj_init.props);
+	BT_OTS_OBJ_SET_PROP_PATCH(obj_init.props);
 
-	err = bt_ots_obj_add(ots, &obj_init);
+	mult = 2;
+	err = bt_ots_obj_add(ots, &obj_init, &mult);
 	if (err) {
 		printk("Failed to add an object to OTS (err: %d)\n", err);
 		return err;
 	}
-
 	return 0;
 }
 

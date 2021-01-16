@@ -289,7 +289,8 @@ ssize_t bt_gatt_ots_olcp_write(struct bt_conn *conn,
 		}
 
 		if (ots->cb->obj_selected) {
-			ots->cb->obj_selected(ots, conn, ots->cur_obj->id);
+			ots->cb->obj_selected(ots, conn, ots->cur_obj->id,
+					      ots->cur_obj->user_data);
 		}
 	}
 
