@@ -77,6 +77,11 @@ config BT_OTS_L2CAP_CHAN_RX_MTU
 	default BT_BUF_ACL_RX_SIZE
 	range 21 BT_BUF_ACL_RX_SIZE
 
+config BT_OTS_MAX_OBJ_NAME_LENGTH
+	int "Maximum length of object names"
+	default 8
+	range 1 23
+
 module = BT_OTS
 module-str = BT_OTS
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"

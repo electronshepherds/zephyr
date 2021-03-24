@@ -128,7 +128,7 @@ static void ots_obj_selected(struct bt_ots *ots, struct bt_conn *conn,
 	printk("Object with %s ID has been selected\n", id_str);
 }
 
-static uint32_t ots_obj_read(struct bt_ots *ots, struct bt_conn *conn,
+static int ots_obj_read(struct bt_ots *ots, struct bt_conn *conn,
 			     uint64_t id, void *user_data, uint8_t **data,
 			     uint32_t len, uint32_t offset)
 {

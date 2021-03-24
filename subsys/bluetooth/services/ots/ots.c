@@ -136,6 +136,31 @@ static ssize_t ots_obj_name_read(struct bt_conn *conn,
 				 strlen(ots->cur_obj->metadata.name));
 }
 
+ssize_t ots_obj_name_write(struct bt_conn *conn,
+			   const struct bt_gatt_attr *attr,
+			   const void *buf, uint16_t len,
+			   uint16_t offset, uint8_t flags)
+{
+	struct bt_ots *ots = (struct bt_ots *) attr->user_data;
+
+	LOG_DBG("OTS Object Name GATT Write Operation");
+
+	if (!ots->cur_obj) {
+		LOG_DBG("No Current Object selected in OTS!");
+		return BT_GATT_ERR(BT_GATT_OTS_OBJECT_NOT_SELECTED);
+	}
+
+	if (offset + len > CONFIG_BT_OTS_MAX_OBJ_NAME_LENGTH) {
+		LOG_DBG("Object name is too long!");
+		return BT_GATT_ERR(BT_GATT_OTS_WRITE_REQUEST_REJECTED);
+	}
+
+	memcpy(ots->cur_obj->metadata.name + offset, buf, len);
+	ots->cur_obj->metadata.name[offset + len] = '\0';
+
+	return len;
+}
+
 static ssize_t ots_obj_type_read(struct bt_conn *conn,
 				 const struct bt_gatt_attr *attr, void *buf,
 				 uint16_t len, uint16_t offset)
@@ -240,11 +265,13 @@ int bt_ots_obj_add(struct bt_ots *ots, struct bt_ots_obj_metadata *obj_init,
 	CHECKIF(name_len == 0 || name_len > BT_OTS_OBJ_MAX_NAME_LEN) {
 		LOG_DBG("Invalid name length %zu", name_len);
 		return -EINVAL;
-
+	}
+/*
 	if (obj_init->props & (~((uint32_t) OBJ_PROP))) {
 		LOG_DBG("Unsupported object properties selected");
 		return -ENOTSUP;
 	}
+*/
 
 	if (!ots_obj_validate_prop_against_oacp(obj_init->props, ots->features.oacp)) {
 		LOG_DBG("Object properties are not a subset of OACP");
@@ -257,17 +284,13 @@ int bt_ots_obj_add(struct bt_ots *ots, struct bt_ots_obj_metadata *obj_init,
 		return err;
 	}
 
-	/* Initialize object. */
-	memcpy(&obj->metadata, obj_init, sizeof(obj->metadata));
-	obj->user_data = user_data;
-
 	if (IS_ENABLED(CONFIG_BT_OTS_DIR_LIST_OBJ)) {
 		bt_ots_dir_list_obj_add(ots->dir_list, ots->obj_manager, ots->cur_obj, obj);
 	}
 
 	/* Request object data. */
 	if (ots->cb->obj_created) {
-		err = ots->cb->obj_created(ots, NULL, obj->id, &obj->user_data,
+		err = ots->cb->obj_created(ots, NULL, obj->id, &user_data,
 					   obj_init);
 		if (err) {
 			bt_gatt_ots_obj_manager_obj_delete(obj);
@@ -279,6 +302,17 @@ int bt_ots_obj_add(struct bt_ots *ots, struct bt_ots_obj_metadata *obj_init,
 
 			return err;
 		}
+	}
+
+	/* Initialize object. */
+	memcpy(&obj->metadata, obj_init, sizeof(obj->metadata));
+	obj->user_data = user_data;
+
+	/* Make object the Current Object if this is the first one added. */
+	ots->cur_obj = obj;
+	if (ots->cb->obj_selected) {
+		ots->cb->obj_selected(ots, NULL, ots->cur_obj->id,
+					ots->cur_obj->user_data);
 	}
 
 	return 0;
@@ -402,8 +436,9 @@ int bt_ots_init(struct bt_ots *ots,
 		BT_GATT_CHRC_READ, BT_GATT_PERM_READ,			\
 		ots_feature_read, NULL, &_ots),				\
 	BT_GATT_CHARACTERISTIC(BT_UUID_OTS_NAME,			\
-		BT_GATT_CHRC_READ, BT_GATT_PERM_READ,			\
-		ots_obj_name_read, NULL, &_ots),			\
+		BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,			\
+		BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,			\
+		ots_obj_name_read, ots_obj_name_write, &_ots),		\
 	BT_GATT_CHARACTERISTIC(BT_UUID_OTS_TYPE,			\
 		BT_GATT_CHRC_READ, BT_GATT_PERM_READ,			\
 		ots_obj_type_read, NULL, &_ots),			\
