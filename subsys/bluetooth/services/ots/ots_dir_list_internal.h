@@ -21,11 +21,7 @@ extern "C" {
 #define DIR_LIST_OBJ_RECORD_MAX_SIZE       172
 #define DIR_LIST_MAX_SIZE (DIR_LIST_OBJ_RECORD_MAX_SIZE * CONFIG_BT_OTS_MAX_OBJ_CNT)
 
-struct bt_ots_dir_list {
-	struct net_buf_simple net_buf;
-	struct bt_gatt_ots_object *dir_list_obj;
-	uint8_t _content[DIR_LIST_MAX_SIZE];
-};
+struct bt_ots_dir_list;
 
 /** @brief Directory Listing record flag field. */
 enum {
@@ -145,15 +141,12 @@ enum {
 #define BT_OTS_DIR_LIST_GET_FLAG_EXTENDED(flags) \
 	((flags) & BIT(BT_OTS_DIR_LIST_FLAG_EXTENDED))
 
-void bt_ots_dir_list_obj_add(struct bt_ots_dir_list *dir_list, void *obj_manager,
-			     struct bt_gatt_ots_object *cur_obj, struct bt_gatt_ots_object *objj);
-void bt_ots_dir_list_obj_remove(struct bt_ots_dir_list *dir_list, void *obj_manager,
-				struct bt_gatt_ots_object *cur_obj, struct bt_gatt_ots_object *obj);
 void bt_ots_dir_list_selected(struct bt_ots_dir_list *dir_list, void *obj_manager,
 			      struct bt_gatt_ots_object *cur_obj);
 void bt_ots_dir_list_init(struct bt_ots_dir_list **dir_list, void *obj_manager);
-ssize_t bt_ots_dir_list_content_get(struct bt_ots_dir_list *dir_list, void **data,
-				size_t len, off_t offset);
+ssize_t bt_ots_dir_list_content_get(struct bt_ots_dir_list *dir_list, void *obj_manager,
+				    void **data, size_t len, off_t offset);
+bool bt_ots_dir_list_is_idle(const struct bt_ots_dir_list *dir_list);
 
 #ifdef __cplusplus
 }
